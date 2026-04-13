@@ -15,6 +15,9 @@ python pipeline.py
 # Run raw data migration (copies all MySQL tables to PostgreSQL as-is)
 python extract_raw.py
 
+# Load raw tables from PostgreSQL to Snowflake
+python load_snowflake.py
+
 # Start PostgreSQL container
 docker compose up -d
 
@@ -28,22 +31,23 @@ docker exec basket_craft_dw psql -U postgres -d basket_craft_dw -c "SELECT COUNT
 ## Architecture
 
 ```
-MySQL (db.isba.co)          PostgreSQL (Docker/RDS)
-┌─────────────────┐         ┌─────────────────────┐
-│ orders          │         │ monthly_sales_summary│
-│ order_items     │  ──→    │ (aggregated metrics) │
-│ products        │  ETL    │                     │
-│ order_item_refunds│       │ OR raw tables via   │
-│ users           │         │ extract_raw.py      │
-│ website_*       │         │                     │
-└─────────────────┘         └─────────────────────┘
+MySQL (db.isba.co)          PostgreSQL (AWS RDS)           Snowflake
+┌─────────────────┐         ┌─────────────────────┐        ┌─────────────────┐
+│ orders          │         │ monthly_sales_summary│        │ basket_craft.raw│
+│ order_items     │  ──→    │ (aggregated metrics) │  ──→   │ (all raw tables)│
+│ products        │  ETL    │                     │  load   │                 │
+│ order_item_refunds│       │ OR raw tables via   │ _snow   │ Via write_pandas│
+│ users           │         │ extract_raw.py      │ flake   │ full refresh    │
+│ website_*       │         │                     │         │                 │
+└─────────────────┘         └─────────────────────┘        └─────────────────┘
 ```
 
 **Key files:**
 - `pipeline.py` - Main ETL with transform logic (aggregates by month/product)
 - `extract_raw.py` - Bulk migration utility using PostgreSQL COPY
+- `load_snowflake.py` - Loads raw tables from PostgreSQL to Snowflake
 - `schema.sql` - DDL for monthly_sales_summary table
-- `.env` - Database credentials (MYSQL_* and PG_* variables)
+- `.env` - Database credentials (MYSQL_*, PG_*, and SNOWFLAKE_* variables)
 
 ## Data Processing Patterns
 
@@ -58,6 +62,17 @@ MySQL (db.isba.co)          PostgreSQL (Docker/RDS)
 Environment variables in `.env`:
 - MySQL: `MYSQL_HOST`, `MYSQL_PORT`, `MYSQL_USER`, `MYSQL_PASSWORD`, `MYSQL_DATABASE`
 - PostgreSQL: `PG_HOST`, `PG_PORT`, `PG_USER`, `PG_PASSWORD`, `PG_DATABASE`
+- Snowflake: `SNOWFLAKE_ACCOUNT`, `SNOWFLAKE_USER`, `SNOWFLAKE_PASSWORD`, `SNOWFLAKE_ROLE`, `SNOWFLAKE_WAREHOUSE`, `SNOWFLAKE_DATABASE`, `SNOWFLAKE_SCHEMA`
+
+### Snowflake Loader
+
+`load_snowflake.py` reads all tables from PostgreSQL and loads them into Snowflake:
+
+- **Source**: PostgreSQL RDS (configured via `PG_*` variables)
+- **Target**: Snowflake `basket_craft.raw` schema
+- **Method**: Uses `snowflake-connector-python` with `write_pandas()` for bulk loading
+- **Strategy**: Full refresh (overwrites tables on each run)
+- **Tables**: Dynamically discovers all tables in PostgreSQL `public` schema
 
 ## Documentation
 
