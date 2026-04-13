@@ -1,0 +1,15 @@
+version: 2
+
+models:
+  - name: fct_order_items
+    description: >
+      Fact table containing order line items. The grain is one row per order item,
+      representing a single product purchased within an order. Joins order header
+      attributes from stg_orders and includes foreign keys to dim_customers,
+      dim_products, and dim_date.
+    columns:
+      - name: order_item_id
+        description: Primary key - unique identifier for each order line item
+        tests:
+          - unique
+          - not_null

@@ -1,0 +1,16 @@
+version: 2
+
+sources:
+  - name: raw
+    description: Raw data loaded from PostgreSQL into Snowflake
+    database: basket_craft
+    schema: raw
+    tables:
+      - name: orders
+        description: Customer orders with timestamps and totals
+      - name: order_items
+        description: Line items for each order with product and price
+      - name: products
+        description: Product catalog with names and base prices
+      - name: customers
+        description: Customer profiles with contact information
